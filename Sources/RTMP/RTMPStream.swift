@@ -267,7 +267,7 @@ open class RTMPStream: NetStream {
                 mixer.audioIO.encoder.stopRunning()
                 mixer.videoIO.encoder.stopRunning()
                 sampler?.stopRunning()
-                mixer.recorder.stopRunning()
+                
             default:
                 break
             }
