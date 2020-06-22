@@ -45,6 +45,11 @@ open class NetSocket: NSObject {
     public func doOutput(data: Data, locked: UnsafeMutablePointer<UInt32>? = nil) -> Int {
         queueBytesOut.mutate { $0 += Int64(data.count) }
         outputQueue.async {
+            defer {
+                if locked != nil {
+                    OSAtomicAnd32Barrier(0, locked!)
+                }
+            }
             guard let outputStream = self.outputStream else  { // trying this  , outputStream.streamStatus == .open
                 print("Connection not created yet ! =====> Return")
                 return
@@ -77,10 +82,7 @@ open class NetSocket: NSObject {
             }
             catch {print("err in doOutput") }
         }
-        // Handle lock here
-        if locked != nil {
-            OSAtomicAnd32Barrier(0, locked!)
-        }
+      
         return data.count
     }
 
