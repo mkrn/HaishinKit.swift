@@ -134,7 +134,7 @@ public final class H264Encoder {
         }
     }
     var locked: UInt32 = 0
-    var lockQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.H264Encoder.lock")
+    var lockQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.H264Encoder.lock", qos: .userInitiated)
     var expectedFPS: Float64 = AVMixer.defaultFPS {
         didSet {
             guard expectedFPS != oldValue else {
