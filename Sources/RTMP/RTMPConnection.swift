@@ -238,7 +238,7 @@ open class RTMPConnection: EventDispatcher {
     private var messages: [UInt16: RTMPMessage] = [:]
     private var arguments: [Any?] = []
     private var currentChunk: RTMPChunk?
-    private var measureInterval: Int = 3
+    private var measureInterval: Int = 2
     private var fragmentedChunks: [UInt16: RTMPChunk] = [:]
     private var previousTotalBytesIn: Int64 = 0
     private var previousTotalBytesOut: Int64 = 0
