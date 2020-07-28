@@ -51,8 +51,10 @@ public final class H264Encoder {
 
     public static let defaultWidth: Int32 = 480
     public static let defaultHeight: Int32 = 272
-    public static let defaultBitrate: UInt32 = 160 * 1000
+    public static let defaultBitrate: UInt32 = 2000 * 1000
     public static let defaultScalingMode: ScalingMode = .trim
+    var maxDataRateBitrateFactor: Double = 1.3
+    static let defaultDataRateLimits:[Int] = [Int(Double(defaultBitrate) * maxDataRateBitrateFactor / 8), 1]
 
     #if os(iOS)
     static let defaultAttributes: [NSString: AnyObject] = [
@@ -109,12 +111,23 @@ public final class H264Encoder {
         }
     }
     #endif
+    var dataRateLimits:[Int] = H264Encoder.defaultDataRateLimits {
+        didSet {
+            guard dataRateLimits != oldValue else {
+                return
+            }
+            invalidateSession = true
+            setProperty(kVTCompressionPropertyKey_DataRateLimits, self.dataRateLimits as CFTypeRef)
+        }
+    }
     var bitrate: UInt32 = H264Encoder.defaultBitrate {
         didSet {
             guard bitrate != oldValue else {
                 return
             }
             setProperty(kVTCompressionPropertyKey_AverageBitRate, Int(bitrate) as CFTypeRef)
+            // Update dataRateLimits accordingly when changing bitrate adaptively
+            dataRateLimits = [Int(round(Double(bitrate) * maxDataRateBitrateFactor / 8)), 1]
         }
     }
     var profileLevel: String = kVTProfileLevel_H264_Baseline_3_1 as String {
@@ -170,6 +183,7 @@ public final class H264Encoder {
             kVTCompressionPropertyKey_RealTime: kCFBooleanTrue,
             kVTCompressionPropertyKey_ProfileLevel: profileLevel as NSObject,
             kVTCompressionPropertyKey_AverageBitRate: Int(bitrate) as NSObject,
+            kVTCompressionPropertyKey_DataRateLimits: dataRateLimits as NSObject,
             kVTCompressionPropertyKey_ExpectedFrameRate: NSNumber(value: expectedFPS),
             kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: NSNumber(value: maxKeyFrameIntervalDuration),
             kVTCompressionPropertyKey_AllowFrameReordering: !isBaseline as NSObject,
