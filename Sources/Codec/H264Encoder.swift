@@ -53,8 +53,8 @@ public final class H264Encoder {
     public static let defaultHeight: Int32 = 272
     public static let defaultBitrate: UInt32 = 2000 * 1000
     public static let defaultScalingMode: ScalingMode = .trim
-    var maxDataRateBitrateFactor: Double = 1.3
-    static let defaultDataRateLimits:[Int] = [Int(Double(defaultBitrate) * maxDataRateBitrateFactor / 8), 1]
+    // var maxDataRateBitrateFactor: Double = 1.3 Hardcoded lower 
+    static let defaultDataRateLimits:[Int] = [Int(Double(defaultBitrate) * 1.3 / 8), 1]
 
     #if os(iOS)
     static let defaultAttributes: [NSString: AnyObject] = [
@@ -127,7 +127,7 @@ public final class H264Encoder {
             }
             setProperty(kVTCompressionPropertyKey_AverageBitRate, Int(bitrate) as CFTypeRef)
             // Update dataRateLimits accordingly when changing bitrate adaptively
-            dataRateLimits = [Int(round(Double(bitrate) * maxDataRateBitrateFactor / 8)), 1]
+            dataRateLimits = [Int(round(Double(bitrate) * 1.3 / 8)), 1]
         }
     }
     var profileLevel: String = kVTProfileLevel_H264_Baseline_3_1 as String {
