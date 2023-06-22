@@ -103,7 +103,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
         if let connection = connection {
             receive(on: connection)
         }
-        startConnectionCheckTimer()
+//        startConnectionCheckTimer()
     }
 
     func close(isDisconnected: Bool) {
@@ -131,8 +131,8 @@ final class RTMPNWSocket: RTMPSocketCompatible {
         }
 
         // Cancel the connection checking timer
-        connectionCheckTimer?.cancel()
-        connectionCheckTimer = nil
+//        connectionCheckTimer?.cancel()
+//        connectionCheckTimer = nil
     }
 
     @discardableResult
