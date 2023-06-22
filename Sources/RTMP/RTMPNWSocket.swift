@@ -11,7 +11,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     var chunkSizeC: Int = RTMPChunk.defaultSize
     var chunkSizeS: Int = RTMPChunk.defaultSize
     var windowSizeC = RTMPNWSocket.defaultWindowSizeC
-    var timeout: Int = NetSocket.defaultTimeout
+    var timeout: Int = 5 //NetSocket.defaultTimeout
     var readyState: RTMPSocketReadyState = .uninitialized {
         didSet {
             delegate?.socket(self, readyState: readyState)
@@ -35,6 +35,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private(set) var queueBytesOut: Atomic<Int64> = .init(0)
     private(set) var totalBytesIn: Atomic<Int64> = .init(0)
     private(set) var totalBytesOut: Atomic<Int64> = .init(0)
+    private var isViable = false
     private(set) var connected = false {
         didSet {
             if connected {
@@ -44,6 +45,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
             }
             readyState = .closed
             for event in events {
+                print("on close dispatching event", event)
                 delegate?.dispatch(event: event)
             }
             events.removeAll()
@@ -64,7 +66,8 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private var parameters: NWParameters = .tcp
     private lazy var inputQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.input", qos: qualityOfService)
     private lazy var outputQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.output", qos: qualityOfService)
-    private var timeoutHandler: DispatchWorkItem?
+
+    private var connectionCheckTimer: DispatchSourceTimer?
 
     func connect(withName: String, port: Int) {
         handshake.clear()
@@ -75,22 +78,32 @@ final class RTMPNWSocket: RTMPSocketCompatible {
         totalBytesOut.mutate { $0 = 0 }
         queueBytesOut.mutate { $0 = 0 }
         inputBuffer.removeAll(keepingCapacity: false)
-        connection = NWConnection(to: NWEndpoint.hostPort(host: .init(withName), port: .init(integerLiteral: NWEndpoint.Port.IntegerLiteralType(port))), using: parameters)
+
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.connectionTimeout = 5
+        tcpOptions.enableFastOpen = true
+        let tlsOptions = NWProtocolTLS.Options()
+        let params = NWParameters(tls: tlsOptions, tcp: tcpOptions)
+
+        connection = NWConnection(to: NWEndpoint.hostPort(host: .init(withName), port: .init(integerLiteral: NWEndpoint.Port.IntegerLiteralType(port))), using: params)
         connection?.stateUpdateHandler = stateDidChange(to:)
+        connection?.betterPathUpdateHandler = { [weak self] isAvailable in
+            print("BETTER PATH UPDATE HANDLER", isAvailable)
+//            self?.betterPath(isAvailable: isAvailable)
+        }
+        connection?.viabilityUpdateHandler = { [weak self] isViable in
+            print("VIABILITY UPDATE HANDLER", isViable)
+            self?.isViable = isViable
+            if (!isViable) {
+                self?.stateDidChange(to: .failed(.posix(.ENOTCONN)))
+            }
+//            self?.viabilityDidChange(isViable: isViable)
+        }
         connection?.start(queue: inputQueue)
         if let connection = connection {
             receive(on: connection)
         }
-        if 0 < timeout {
-            let newTimeoutHandler = DispatchWorkItem { [weak self] in
-                guard let self = self, self.timeoutHandler?.isCancelled == false else {
-                    return
-                }
-                self.didTimeout()
-            }
-            timeoutHandler = newTimeoutHandler
-            DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + .seconds(timeout), execute: newTimeoutHandler)
-        }
+        startConnectionCheckTimer()
     }
 
     func close(isDisconnected: Bool) {
@@ -103,17 +116,23 @@ final class RTMPNWSocket: RTMPSocketCompatible {
             events.append(Event(type: .rtmpStatus, bubbles: false, data: data))
         }
         readyState = .closing
-        if connection.state == .ready {
+        if connection.state == .ready && isViable {
+            print("closing connection that's .ready and viable")
             outputQueue.async {
                 let completion: NWConnection.SendCompletion = .contentProcessed { (_: Error?) in
+                    print("closed connection after final message")
                     self.connection = nil
                 }
                 connection.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: completion)
             }
         } else {
+            print("setting connection to nil")
             self.connection = nil
         }
-        timeoutHandler?.cancel()
+
+        // Cancel the connection checking timer
+        connectionCheckTimer?.cancel()
+        connectionCheckTimer = nil
     }
 
     @discardableResult
@@ -164,14 +183,24 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private func stateDidChange(to state: NWConnection.State) {
         switch state {
         case .ready:
-            timeoutHandler?.cancel()
+            print("READY")
             connected = true
-        case .failed:
+        case .waiting(let error):
+            print("Connection waiting: \(error.localizedDescription)")
+            close(isDisconnected: true)
+        case .setup:
+            print("Connection is setting up")
+        case .preparing:
+            print("Connection is preparing")
+        case .failed(let error):
+            print("Connection failed: \(error.localizedDescription)")
             close(isDisconnected: true)
         case .cancelled:
+            print("Connection cancelled")
             close(isDisconnected: true)
-        default:
-            break
+        @unknown default:
+            print("Unknown connection state")
+            // Handle other possible states
         }
     }
 
@@ -185,6 +214,19 @@ final class RTMPNWSocket: RTMPSocketCompatible {
             self.listen()
             self.receive(on: connection)
         }
+    }
+
+    private func startConnectionCheckTimer() {
+        connectionCheckTimer?.cancel()
+        connectionCheckTimer = DispatchSource.makeTimerSource(queue: inputQueue)
+        connectionCheckTimer?.schedule(deadline: .now(), repeating: .seconds(timeout))
+        connectionCheckTimer?.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            if self.connection?.state != .ready {
+                self.stateDidChange(to: .failed(.posix(.ETIMEDOUT)))
+            }
+        }
+        connectionCheckTimer?.resume()
     }
 
     private func listen() {

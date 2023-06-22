@@ -5,9 +5,10 @@ import Logboard
 import PhotosUI
 import SwiftUI
 import VideoToolbox
+import Network
 
 final class ViewModel: ObservableObject {
-    let maxRetryCount: Int = 5
+    let maxRetryCount: Int = 1000
 
     private var rtmpConnection = RTMPConnection()
     @Published var rtmpStream: RTMPStream!
@@ -136,6 +137,15 @@ final class ViewModel: ObservableObject {
         rtmpConnection.addEventListener(.rtmpStatus, selector: #selector(rtmpStatusHandler), observer: self)
         rtmpConnection.addEventListener(.ioError, selector: #selector(rtmpErrorHandler), observer: self)
         rtmpConnection.connect(Preference.defaultInstance.uri!)
+        
+        let options = NWProtocolTCP.Options()
+        options.connectionTimeout = 5
+        options.connectionDropTime = 5
+        options.enableFastOpen = true
+        options.noDelay = true
+        
+        let params = NWParameters(tls: nil, tcp: options)
+      rtmpConnection.parameters = params
     }
 
     func stopPublish() {
@@ -212,10 +222,14 @@ final class ViewModel: ObservableObject {
             rtmpStream.publish(Preference.defaultInstance.streamName!)
         // sharedObject!.connect(rtmpConnection)
         case RTMPConnection.Code.connectFailed.rawValue, RTMPConnection.Code.connectClosed.rawValue:
+            print("fail code")
             guard retryCount <= maxRetryCount else {
                 return
             }
+            
+            print("sleeping", pow(2.0, Double(retryCount)))
             Thread.sleep(forTimeInterval: pow(2.0, Double(retryCount)))
+            print("connecting...")
             rtmpConnection.connect(Preference.defaultInstance.uri!)
             retryCount += 1
         default:
