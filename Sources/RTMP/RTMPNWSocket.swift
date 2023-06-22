@@ -116,23 +116,21 @@ final class RTMPNWSocket: RTMPSocketCompatible {
             events.append(Event(type: .rtmpStatus, bubbles: false, data: data))
         }
         readyState = .closing
-        if connection.state == .ready && isViable {
-            print("closing connection that's .ready and viable")
-            outputQueue.async {
-                let completion: NWConnection.SendCompletion = .contentProcessed { (_: Error?) in
-                    print("closed connection after final message")
-                    self.connection = nil
-                }
-                connection.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: completion)
-            }
-        } else {
-            print("setting connection to nil")
-            self.connection = nil
-        }
-
-        // Cancel the connection checking timer
-//        connectionCheckTimer?.cancel()
-//        connectionCheckTimer = nil
+        self.connection = nil
+        
+//        if connection.state == .ready && isViable {
+//            print("closing connection that's .ready and viable")
+//            outputQueue.async {
+//                let completion: NWConnection.SendCompletion = .contentProcessed { (_: Error?) in
+//                    print("closed connection after final message")
+//                    // need timeout here just in case..
+//                }
+//                connection.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: completion)
+//            }
+//        } else {
+//            print("setting connection to nil")
+//            self.connection = nil
+//        }
     }
 
     @discardableResult
