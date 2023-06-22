@@ -1,7 +1,7 @@
 struct Preference {
     static var defaultInstance = Preference()
 
-    var uri: String? = "rtmp://134.209.253.66/live"
+    var uri: String? = "rtmps://go.eventlive.pro:443/live"
     var streamName: String? = "TEST-EBPZPBVA"
     
 //    var uri: String? = "rtmps://global-live.mux.com:443/app"
