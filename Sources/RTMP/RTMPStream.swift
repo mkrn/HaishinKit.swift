@@ -525,7 +525,6 @@ open class RTMPStream: NetStream {
         case .publishing:
             send(handlerName: "@setDataFrame", arguments: "onMetaData", createMetaData())
             mixer.startEncoding(muxer)
-            
         default:
             break
         }

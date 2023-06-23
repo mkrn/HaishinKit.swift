@@ -366,7 +366,6 @@ open class RTMPConnection: EventDispatcher {
 
         switch Code(rawValue: code) {
         case .some(.connectSuccess):
-            print("connectSuccess")
             connected = true
             socket.chunkSizeS = chunkSize
             socket.doOutput(chunk: RTMPChunk(
@@ -505,14 +504,12 @@ extension RTMPConnection: RTMPSocketDelegate {
         }
         switch readyState {
         case .handshakeDone:
-            print("RTMPConnection .handshakeDone")
             guard let chunk: RTMPChunk = makeConnectionChunk() else {
                 close()
                 break
             }
             socket.doOutput(chunk: chunk)
         case .closed:
-            print("RTMPConnection connected = false")
             connected = false
             sequence = 0
             currentChunk = nil
@@ -523,7 +520,6 @@ extension RTMPConnection: RTMPSocketDelegate {
             operations.removeAll()
             fragmentedChunks.removeAll()
         default:
-            print("other readyState", readyState)
             break
         }
     }
