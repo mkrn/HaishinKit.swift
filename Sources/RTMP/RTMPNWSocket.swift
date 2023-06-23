@@ -65,7 +65,8 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private var parameters: NWParameters = .tcp
     private lazy var inputQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.input", qos: qualityOfService)
     private lazy var outputQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.output", qos: qualityOfService)
-
+    private var timeoutHandler: DispatchWorkItem?
+    
     func connect(withName: String, port: Int) {
         handshake.clear()
         readyState = .uninitialized
@@ -88,6 +89,16 @@ final class RTMPNWSocket: RTMPSocketCompatible {
         if let connection = connection {
             receive(on: connection)
         }
+        if 0 < timeout {
+            let newTimeoutHandler = DispatchWorkItem { [weak self] in
+                guard let self = self, self.timeoutHandler?.isCancelled == false else {
+                    return
+                }
+                self.didTimeout()
+            }
+            timeoutHandler = newTimeoutHandler
+            DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + .seconds(timeout), execute: newTimeoutHandler)
+        }
     }
 
     func close(isDisconnected: Bool) {
@@ -101,6 +112,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
         }
         readyState = .closing
         self.connection = nil
+        timeoutHandler?.cancel()
     }
 
     @discardableResult
@@ -151,7 +163,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private func stateDidChange(to state: NWConnection.State) {
         switch state {
         case .ready:
-            print("Connection Ready")
+            timeoutHandler?.cancel()
             connected = true
         case .waiting(let error):
             print("Connection waiting: \(error.localizedDescription)")

@@ -5,7 +5,6 @@ import Logboard
 import PhotosUI
 import SwiftUI
 import VideoToolbox
-import Network
 
 final class ViewModel: ObservableObject {
     let maxRetryCount: Int = 1000
@@ -216,7 +215,6 @@ final class ViewModel: ObservableObject {
             guard retryCount <= maxRetryCount else {
                 return
             }
-            
             Thread.sleep(forTimeInterval: pow(2.0, Double(retryCount)))
             rtmpConnection.connect(Preference.defaultInstance.uri!)
             retryCount += 1
