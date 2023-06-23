@@ -66,7 +66,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private lazy var inputQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.input", qos: qualityOfService)
     private lazy var outputQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.output", qos: qualityOfService)
     private var timeoutHandler: DispatchWorkItem?
-    
+
     func connect(withName: String, port: Int) {
         handshake.clear()
         readyState = .uninitialized
@@ -76,7 +76,6 @@ final class RTMPNWSocket: RTMPSocketCompatible {
         totalBytesOut.mutate { $0 = 0 }
         queueBytesOut.mutate { $0 = 0 }
         inputBuffer.removeAll(keepingCapacity: false)
-
         connection = NWConnection(to: NWEndpoint.hostPort(host: .init(withName), port: .init(integerLiteral: NWEndpoint.Port.IntegerLiteralType(port))), using: parameters)
         connection?.stateUpdateHandler = stateDidChange(to:)
         connection?.viabilityUpdateHandler = { [weak self] isViable in
@@ -195,7 +194,6 @@ final class RTMPNWSocket: RTMPSocketCompatible {
             self.receive(on: connection)
         }
     }
-
 
     private func listen() {
         switch readyState {
