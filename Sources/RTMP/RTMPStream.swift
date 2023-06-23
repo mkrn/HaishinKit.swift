@@ -352,7 +352,6 @@ open class RTMPStream: NetStream {
             guard let name: String = name else {
                 switch self.readyState {
                 case .publish, .publishing:
-                    print("closing on no name")
                     self.close(withLockQueue: false)
                 default:
                     break
@@ -379,12 +378,9 @@ open class RTMPStream: NetStream {
 
             switch self.readyState {
             case .initialized:
-                print("rtmp stream initialized")
                 self.messages.append(message)
             default:
-                print("rtmpStream readyState default", self.readyState)
                 self.readyState = .publish
-                print("do output", message)
                 self.rtmpConnection?.socket.doOutput(chunk: RTMPChunk(message: message))
             }
         }
@@ -474,7 +470,6 @@ open class RTMPStream: NetStream {
     }
 
     private func didChangeReadyState(_ readyState: ReadyState, oldValue: ReadyState) {
-        print("RTMPStream didChangeReadyState", readyState)
         guard let rtmpConnection else {
             return
         }
@@ -507,7 +502,6 @@ open class RTMPStream: NetStream {
                 default:
                     break
                 }
-                print("do output for message", message.commandName)
                 rtmpConnection.socket.doOutput(chunk: RTMPChunk(message: message))
             }
             messages.removeAll()
@@ -529,9 +523,7 @@ open class RTMPStream: NetStream {
             dataTimeStamps.removeAll()
             FCPublish()
         case .publishing:
-            print("send setDataFrame")
             send(handlerName: "@setDataFrame", arguments: "onMetaData", createMetaData())
-            print("startEncoding")
             mixer.startEncoding(muxer)
             
         default:
