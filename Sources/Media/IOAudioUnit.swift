@@ -86,7 +86,47 @@ final class IOAudioUnit: NSObject, IOUnit {
         guard 0 < numSamples else {
             return nil
         }
-        return CMAudioSampleBufferUtil.makeSampleBuffer(buffer, numSamples: numSamples, presentationTimeStamp: presentationTimeStamp)
+        var status: OSStatus = noErr
+        var sampleBuffer: CMSampleBuffer?
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 1, timescale: presentationTimeStamp.timescale),
+            presentationTimeStamp: presentationTimeStamp,
+            decodeTimeStamp: .invalid
+        )
+        status = CMSampleBufferCreate(
+            allocator: kCFAllocatorDefault,
+            dataBuffer: nil,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: buffer.formatDescription,
+            sampleCount: numSamples,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleSizeEntryCount: 0,
+            sampleSizeArray: nil,
+            sampleBufferOut: &sampleBuffer
+        )
+        guard
+            let sampleBuffer = sampleBuffer,
+            let formatDescription = sampleBuffer.formatDescription, status == noErr else {
+            return nil
+        }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(cmAudioFormatDescription: formatDescription), frameCapacity: AVAudioFrameCount(numSamples)) else {
+            return nil
+        }
+        buffer.frameLength = buffer.frameCapacity
+        status = CMSampleBufferSetDataBufferFromAudioBufferList(
+            sampleBuffer,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: 0,
+            bufferList: buffer.audioBufferList
+        )
+        guard status == noErr else {
+            return nil
+        }
+        return sampleBuffer
     }
 }
 
