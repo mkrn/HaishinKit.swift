@@ -298,7 +298,7 @@ extension NetStream: IOMixerDelegate {
 
     func mixerSessionWillResume(_ mixer: IOMixer) {
         lockQueue.async {
-            mixer.startCaptureSession()
+            mixer.startCaptureSessionIfNeeded()
         }
     }
 
