@@ -68,6 +68,13 @@ final class ViewModel: ObservableObject {
         }
         rtmpStream.sessionPreset = .hd1280x720
         rtmpStream.videoSettings.videoSize = .init(width: 720, height: 1280)
+        
+        if #available(iOS 16.0, *) {
+          rtmpStream.videoSettings.bitRateMode = .constant
+        } else {
+            rtmpStream.videoSettings.bitRateMode = .average
+        }
+        
         rtmpStream.mixer.recorder.delegate = self
         rtmpStream.delegate = self
         rtmpConnection.delegate = self
@@ -105,13 +112,13 @@ final class ViewModel: ObservableObject {
         rtmpStream.attachCamera(AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: currentPosition)) { error in
             logger.error(error)
         }
-        rtmpStream.publisher(for: \.currentFPS)
-            .sink { [weak self] currentFPS in
-                guard let self = self else {
-                    return
-                }
-            }
-            .store(in: &subscriptions)
+//        rtmpStream.publisher(for: \.currentFPS)
+//            .sink { [weak self] currentFPS in
+//                guard let self = self else {
+//                    return
+//                }
+//            }
+//            .store(in: &subscriptions)
 
         nc.publisher(for: AVAudioSession.interruptionNotification, object: nil)
             .sink { notification in
@@ -256,12 +263,30 @@ extension ViewModel : RTMPConnectionDelegate {
     // MARK: RTMPStreamDelegate
     func connection(_ connection: HaishinKit.RTMPConnection, publishInsufficientBWOccured stream: HaishinKit.RTMPStream) {
         print("insufficientBW",  stream.videoSettings.bitRate,  stream.audioSettings.bitRate, connection.currentBytesOutPerSecond * 8)
+        var videoBitRate = stream.videoSettings.bitRate
         
+        if videoBitRate > 450 * 1024 {
+            videoBitRate -= 450 * 1024
+        } else {
+            videoBitRate = 60 * 1024
+        }
+        stream.videoSettings.bitRate = videoBitRate
+        print("bitrate now ", videoBitRate)
     }
     
     func connection(_ connection: HaishinKit.RTMPConnection, publishSufficientBWOccured stream: HaishinKit.RTMPStream) {
         print("sufficientBW",  stream.videoSettings.bitRate, stream.audioSettings.bitRate, connection.currentBytesOutPerSecond * 8)
-         
+        guard (connection.currentBytesOutPerSecond > 0 && connection.currentBytesOutPerSecond * 8 > stream.videoSettings.bitRate / 2) else {
+            print("false flag")
+            return
+        }
+        
+        let targetBitrate = UInt32(3200 * 1024)
+        if Double(stream.currentFPS) >= 24 { // Getting stable
+            var videoBitRate = min(stream.videoSettings.bitRate + 150 * 1024, targetBitrate)
+            stream.videoSettings.bitRate = videoBitRate
+            print("bitrate now ", videoBitRate)
+        }
     }
      
     
@@ -276,14 +301,16 @@ extension ViewModel : RTMPConnectionDelegate {
                 }
         
                 if connection.currentBytesOutPerSecond == 0 {
-                        zeroCounter += 1
-                    if zeroCounter >= 5 {
-                        zeroCounter = 0
-                        print("STALE")
-                        self.rtmpStream.close()
-        
-                        self.rtmpConnection.connect(Preference.defaultInstance.uri!)
-                    }
+                    print("drop all")
+                    
+//                        zeroCounter += 1
+//                    if zeroCounter >= 5 {
+//                        zeroCounter = 0
+//                        print("STALE")
+//                        self.rtmpStream.close()
+//        
+//                        self.rtmpConnection.connect(Preference.defaultInstance.uri!)
+//                    }
                 } else {
                     zeroCounter = 0
                 }
@@ -318,9 +345,14 @@ extension ViewModel : NetStreamDelegate {
     }
     
     func streamWillDropFrame(_ stream: NetStream) -> Bool {
-        print("streamWillDropFrame")
-        print(rtmpConnection.totalBytesOut)
-        return false
+        let bufferFullness = rtmpConnection.socket.queueBytesOut.value
+        print("streamWillDropFrame", bufferFullness, rtmpConnection.socket.outputBufferSize)
+        let shouldDrop = bufferFullness > Int64(0.6 * Double(rtmpConnection.socket.outputBufferSize));
+        print(shouldDrop)
+        // Decide to drop frame if buffer is more than 80% full
+        return shouldDrop
+
+//        return false
     }
     
     func streamDidOpen(_ stream: NetStream) {

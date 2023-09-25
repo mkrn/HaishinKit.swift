@@ -222,7 +222,7 @@ public class RTMPConnection: EventDispatcher {
     /// The statistics of outgoing bytes per second.
     @objc open private(set) dynamic var currentBytesOutPerSecond: Int32 = 0
 
-    var socket: (any RTMPSocketCompatible)!
+    public var socket: (any RTMPSocketCompatible)!
     var streams: [RTMPStream] = []
     var sequence: Int64 = 0
     var bandWidth: UInt32 = 0
@@ -311,7 +311,7 @@ public class RTMPConnection: EventDispatcher {
         var outputBufferSize: Int = 0
         for stream in streams {
             // in bytes.
-            outputBufferSize += (Int(stream.mixer.videoIO.codec.settings.bitRate) + stream.mixer.audioIO.codec.settings.bitRate) / 8
+            outputBufferSize += ((Int(stream.mixer.videoIO.codec.settings.bitRate) + stream.mixer.audioIO.codec.settings.bitRate) / 8 ) * 5
         }
         if socket.outputBufferSize < outputBufferSize {
             socket.outputBufferSize = outputBufferSize
@@ -482,7 +482,7 @@ public class RTMPConnection: EventDispatcher {
 
 extension RTMPConnection: RTMPSocketDelegate {
     // MARK: RTMPSocketDelegate
-    func socket(_ socket: any RTMPSocketCompatible, readyState: RTMPSocketReadyState) {
+    public func socket(_ socket: any RTMPSocketCompatible, readyState: RTMPSocketReadyState) {
         if logger.isEnabledFor(level: .debug) {
             logger.debug(readyState)
         }
@@ -509,7 +509,7 @@ extension RTMPConnection: RTMPSocketDelegate {
         }
     }
 
-    func socket(_ socket: any RTMPSocketCompatible, totalBytesIn: Int64) {
+    public func socket(_ socket: any RTMPSocketCompatible, totalBytesIn: Int64) {
         guard windowSizeS * (sequence + 1) <= totalBytesIn else {
             return
         }
@@ -521,7 +521,7 @@ extension RTMPConnection: RTMPSocketDelegate {
         sequence += 1
     }
 
-    func socket(_ socket: any RTMPSocketCompatible, data: Data) {
+    public func socket(_ socket: any RTMPSocketCompatible, data: Data) {
         guard let chunk = currentChunk ?? RTMPChunk(data, size: socket.chunkSizeC) else {
             socket.inputBuffer.append(data)
             return

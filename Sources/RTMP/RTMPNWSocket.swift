@@ -64,6 +64,7 @@ final class RTMPNWSocket: RTMPSocketCompatible {
     private var parameters: NWParameters = .tcp
     private lazy var networkQueue = DispatchQueue(label: "com.haishinkit.HaishinKit.RTMPNWSocket.network", qos: qualityOfService)
     private var timeoutHandler: DispatchWorkItem?
+     
 
     func connect(withName: String, port: Int) {
         handshake.clear()

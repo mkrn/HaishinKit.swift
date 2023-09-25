@@ -40,7 +40,7 @@ open class NetSocket: NSObject {
             }
         }
     }
-    var outputStream: OutputStream? {
+    public var outputStream: OutputStream? {
         didSet {
             outputStream?.delegate = self
             outputStream?.setProperty(securityLevel.rawValue, forKey: .socketSecurityLevelKey)

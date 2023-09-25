@@ -1,6 +1,6 @@
 import Foundation
 
-enum RTMPSocketReadyState: UInt8 {
+public enum RTMPSocketReadyState: UInt8 {
     case uninitialized = 0
     case versionSent = 1
     case ackSent = 2
@@ -9,7 +9,7 @@ enum RTMPSocketReadyState: UInt8 {
     case closed = 5
 }
 
-protocol RTMPSocketCompatible: AnyObject {
+public protocol RTMPSocketCompatible: AnyObject {
     var timeout: Int { get set }
     var delegate: (any RTMPSocketDelegate)? { get set }
     var connected: Bool { get }
@@ -24,7 +24,8 @@ protocol RTMPSocketCompatible: AnyObject {
     var queueBytesOut: Atomic<Int64> { get }
     var securityLevel: StreamSocketSecurityLevel { get set }
     var qualityOfService: DispatchQoS { get set }
-
+     
+    
     @discardableResult
     func doOutput(chunk: RTMPChunk) -> Int
     func close(isDisconnected: Bool)
@@ -46,7 +47,7 @@ extension RTMPSocketCompatible {
 
 // MARK: -
 // swiftlint:disable:next class_delegate_protocol
-protocol RTMPSocketDelegate: EventDispatcherConvertible {
+public protocol RTMPSocketDelegate: EventDispatcherConvertible {
     func socket(_ socket: any RTMPSocketCompatible, data: Data)
     func socket(_ socket: any RTMPSocketCompatible, readyState: RTMPSocketReadyState)
     func socket(_ socket: any RTMPSocketCompatible, totalBytesIn: Int64)
