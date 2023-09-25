@@ -93,7 +93,7 @@ struct BottomMenuView: View {
 
                         Slider(
                             value: $viewModel.videoRate,
-                            in: 32...1024,
+                            in: 32...6024,
                             step: 1,
                             onEditingChanged: { _ in
                                 print("videoRate", viewModel.videoRate, "kbps")

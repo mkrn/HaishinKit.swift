@@ -7,7 +7,7 @@ import SwiftUI
 import VideoToolbox
 
 final class ViewModel: ObservableObject {
-    let maxRetryCount: Int = 5
+    let maxRetryCount: Int = 10000
 
     private var rtmpConnection = RTMPConnection()
     @Published var rtmpStream: RTMPStream!
@@ -17,10 +17,12 @@ final class ViewModel: ObservableObject {
     private var retryCount: Int = 0
     @Published var published = false
     @Published var zoomLevel: CGFloat = 1.0
-    @Published var videoRate = CGFloat(VideoCodecSettings.default.bitRate / 1000)
+    @Published var videoRate = CGFloat(3200); //CGFloat(VideoCodecSettings.default.bitRate / 1000)
     @Published var audioRate = CGFloat(AudioCodecSettings.default.bitRate / 1000)
     @Published var fps: String = "FPS"
     private var nc = NotificationCenter.default
+    
+    var zeroCounter = 0;
 
     var subscriptions = Set<AnyCancellable>()
 
@@ -67,6 +69,8 @@ final class ViewModel: ObservableObject {
         rtmpStream.sessionPreset = .hd1280x720
         rtmpStream.videoSettings.videoSize = .init(width: 720, height: 1280)
         rtmpStream.mixer.recorder.delegate = self
+        rtmpStream.delegate = self
+        rtmpConnection.delegate = self
 
         nc.publisher(for: UIDevice.orientationDidChangeNotification, object: nil)
             .sink { [weak self] _ in
@@ -105,9 +109,6 @@ final class ViewModel: ObservableObject {
             .sink { [weak self] currentFPS in
                 guard let self = self else {
                     return
-                }
-                DispatchQueue.main.async {
-                    self.fps = self.published == true ? "\(currentFPS)" : "FPS"
                 }
             }
             .store(in: &subscriptions)
@@ -246,5 +247,83 @@ extension ViewModel: IORecorderDelegate {
                 print(error)
             }
         })
+    }
+}
+
+
+
+extension ViewModel : RTMPConnectionDelegate {
+    // MARK: RTMPStreamDelegate
+    func connection(_ connection: HaishinKit.RTMPConnection, publishInsufficientBWOccured stream: HaishinKit.RTMPStream) {
+        print("insufficientBW",  stream.videoSettings.bitRate,  stream.audioSettings.bitRate, connection.currentBytesOutPerSecond * 8)
+        
+    }
+    
+    func connection(_ connection: HaishinKit.RTMPConnection, publishSufficientBWOccured stream: HaishinKit.RTMPStream) {
+        print("sufficientBW",  stream.videoSettings.bitRate, stream.audioSettings.bitRate, connection.currentBytesOutPerSecond * 8)
+         
+    }
+     
+    
+    func connection(_ connection: HaishinKit.RTMPConnection, updateStats stream: HaishinKit.RTMPStream) {
+                let curFps = stream.currentFPS
+        
+                let currentBitsPerSecond = connection.currentBytesOutPerSecond * 8;
+                let currentMbps = String(format: "%.1f", Double(currentBitsPerSecond) / 1000.0 / 1000.0);
+                let fpsStr = "\(max(curFps, 30)) fps   \(currentMbps)Mb/s";
+                DispatchQueue.main.async {
+                    self.fps = fpsStr
+                }
+        
+                if connection.currentBytesOutPerSecond == 0 {
+                        zeroCounter += 1
+                    if zeroCounter >= 5 {
+                        zeroCounter = 0
+                        print("STALE")
+                        self.rtmpStream.close()
+        
+                        self.rtmpConnection.connect(Preference.defaultInstance.uri!)
+                    }
+                } else {
+                    zeroCounter = 0
+                }
+            }
+}
+
+extension ViewModel : NetStreamDelegate {
+    func stream(_ stream: NetStream, didOutput audio: AVAudioBuffer, presentationTimeStamp: CMTime) {
+    }
+    
+    func stream(_ stream: NetStream, didOutput video: CMSampleBuffer) {
+    }
+    
+    #if os(iOS)
+    func stream(_ stream: NetStream, sessionWasInterrupted session: AVCaptureSession, reason: AVCaptureSession.InterruptionReason?) {
+        print("sessionWasInterrupted \(stream) \(session) ")
+         
+    }
+    
+    func stream(_ stream: NetStream, sessionInterruptionEnded session: AVCaptureSession) {
+        print("sessionInterruptionEnded \(stream) \(session)")
+    }
+    #endif
+    
+    func stream(_ stream: NetStream, videoCodecErrorOccurred error: VideoCodec.Error) {
+        print("videoCodecErrorOccured \(error)")
+    }
+    
+    func stream(_ stream: NetStream, audioCodecErrorOccurred error: HaishinKit.AudioCodec.Error) {
+        print("audioCodecError \(error)")
+        // Implementation for handling audio codec errors
+    }
+    
+    func streamWillDropFrame(_ stream: NetStream) -> Bool {
+        print("streamWillDropFrame")
+        print(rtmpConnection.totalBytesOut)
+        return false
+    }
+    
+    func streamDidOpen(_ stream: NetStream) {
+        // Implementation for handling the stream being opened
     }
 }
