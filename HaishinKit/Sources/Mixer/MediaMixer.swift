@@ -473,6 +473,19 @@ public final actor MediaMixer {
             break
         }
     }
+
+    @available(tvOS 17.0, *)
+    private func didDeviceWasDisconnected(_ notification: Notification) {
+        guard let device = notification.object as? AVCaptureDevice else {
+            return
+        }
+        if audioIO.devices.values.contains(where: { $0.device == device }) {
+            try? audioIO.attachAudio(0, device: nil, configuration: nil)
+        }
+        if videoIO.devices.values.contains(where: { $0.device == device }) {
+            try? videoIO.attachVideo(0, device: nil, configuration: nil)
+        }
+    }
 }
 
 extension MediaMixer: AsyncRunner {
@@ -543,6 +556,15 @@ extension MediaMixer: AsyncRunner {
                 }
             })
         }
+        subscriptions.append(Task {
+            for await notification in NotificationCenter.default.notifications(
+                named: .AVCaptureDeviceWasDisconnected
+            ) {
+                if #available(tvOS 17.0, *) {
+                    didDeviceWasDisconnected(notification)
+                }
+            }
+        })
         #endif
     }
 
