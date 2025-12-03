@@ -474,7 +474,6 @@ public final actor MediaMixer {
         }
     }
 
-    @available(tvOS 17.0, *)
     private func didDeviceWasDisconnected(_ notification: Notification) {
         guard let device = notification.object as? AVCaptureDevice else {
             return
@@ -560,9 +559,7 @@ extension MediaMixer: AsyncRunner {
             for await notification in NotificationCenter.default.notifications(
                 named: .AVCaptureDeviceWasDisconnected
             ) {
-                if #available(tvOS 17.0, *) {
-                    didDeviceWasDisconnected(notification)
-                }
+                didDeviceWasDisconnected(notification)
             }
         })
         #endif
