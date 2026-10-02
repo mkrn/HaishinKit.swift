@@ -435,9 +435,11 @@ public actor RTMPConnection: HaishinKit.NetworkConnection {
         if logger.isEnabledFor(level: .trace) {
             logger.trace("<<", message)
         }
-        let iterator = outputBuffer.putMessage(type, chunkStreamId: chunkStreamId.rawValue, message: message)
+        // Materialize the chunks here: the iterator writes into outputBuffer lazily, so iterating
+        // it later on the socket actor raced with this actor (rejected by Swift 6.4). Same as upstream.
+        let chunks = Array(outputBuffer.putMessage(type, chunkStreamId: chunkStreamId.rawValue, message: message))
         Task {
-            await socket?.send(iterator)
+            await socket?.send(chunks)
         }
         return message.payload.count
     }
