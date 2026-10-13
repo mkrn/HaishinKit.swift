@@ -58,6 +58,14 @@ public final class VideoScreenObject: ScreenObject, ChromaKeyProcessable {
     private var queue: TypedBlockQueue<CMSampleBuffer>?
     private var effects: [any VideoEffect] = .init()
     private var frameTracker = FrameTracker()
+    /// The frame `copyableImageBuffer(_:)` handed out last, repeated on ticks without a new one.
+    private var lastCopyableImageBuffer: CVPixelBuffer?
+
+    /// Shows its frames as they are: no effects, rounded corners, chroma key, custom size or margins.
+    var showsFramesUnchanged: Bool {
+        isVisible && effects.isEmpty && cornerRadius == 0 && chromaKeyColor == nil && size == .zero
+            && layoutMargin.top == 0 && layoutMargin.left == 0 && layoutMargin.bottom == 0 && layoutMargin.right == 0
+    }
 
     /// Create a screen object.
     override public init(id: String? = nil) {
@@ -136,12 +144,32 @@ public final class VideoScreenObject: ScreenObject, ChromaKeyProcessable {
         }
     }
 
+    /// The frame due at `presentationTimeStamp` (synchronization clock), for a screen that copies it
+    /// instead of rendering it; the previous frame again when no new one has arrived. Frames that
+    /// `isCopyable` rejects stay queued for the renderer.
+    func copyableImageBuffer(_ presentationTimeStamp: CMTime, isCopyable: (CVPixelBuffer) -> Bool) -> CVPixelBuffer? {
+        if let head = queue?.head?.imageBuffer, !isCopyable(head) {
+            return nil
+        }
+        if let sampleBuffer = queue?.dequeue(presentationTimeStamp), let imageBuffer = sampleBuffer.imageBuffer {
+            frameTracker.update(sampleBuffer.presentationTimeStamp)
+            lastCopyableImageBuffer = imageBuffer
+            // The renderer draws from a fresh frame once copying stops.
+            invalidateLayout()
+        }
+        guard let lastCopyableImageBuffer, isCopyable(lastCopyableImageBuffer) else {
+            return nil
+        }
+        return lastCopyableImageBuffer
+    }
+
     func enqueue(_ sampleBuffer: CMSampleBuffer) {
         try? queue?.enqueue(sampleBuffer)
         invalidateLayout()
     }
 
     func reset() {
+        lastCopyableImageBuffer = nil
         frameTracker.clear()
         try? queue?.reset()
         invalidateLayout()

@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import VideoToolbox
 
 #if canImport(AppKit)
 import AppKit
@@ -99,6 +100,11 @@ public final class Screen: ScreenObjectContainerConvertible {
         }
     }
     private var presentationTimeStamp: CMTime = .zero
+    // A VTPixelTransferSession (iOS 16+), kept untyped for the older deployment targets.
+    private var pixelTransferSession: AnyObject?
+
+    /// True while frames are copied instead of rendered (see `copyCameraFrame(into:)`).
+    public private(set) var isCopyingCameraFrames = false
 
     /// Creates a screen object.
     public init() {
@@ -187,6 +193,10 @@ public final class Screen: ScreenObjectContainerConvertible {
     }
 
     func render(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer {
+        isCopyingCameraFrames = copyCameraFrame(into: sampleBuffer)
+        if isCopyingCameraFrames {
+            return sampleBuffer
+        }
         try? sampleBuffer.imageBuffer?.lockBaseAddress(Self.lockFlags)
         defer {
             try? sampleBuffer.imageBuffer?.unlockBaseAddress(Self.lockFlags)
@@ -201,6 +211,42 @@ public final class Screen: ScreenObjectContainerConvertible {
         root.draw(renderer)
         renderer.render()
         return sampleBuffer
+    }
+
+    /// While the camera is the only thing on screen and its frames already have the screen's size and
+    /// pixel format, rendering would only redraw the same picture through Core Image (on the GPU, in
+    /// 16-bit float with colour management) 30 times a second. Copying it with VideoToolbox costs a
+    /// fraction of that, and the camera's buffer is released at once as before.
+    private func copyCameraFrame(into sampleBuffer: CMSampleBuffer) -> Bool {
+        guard #available(iOS 16.0, tvOS 16.0, macOS 13.0, *),
+              delegate == nil,
+              dynamicRangeMode == .sdr,
+              root.isVisible,
+              videoTrackScreenObject.showsFramesUnchanged,
+              root.children.allSatisfy({ $0 === videoTrackScreenObject || !$0.isVisible }),
+              let target = sampleBuffer.imageBuffer else {
+            return false
+        }
+        let presentationTimeStamp = sampleBuffer.presentationTimeStamp.convertTime(from: CMClockGetHostTimeClock(), to: synchronizationClock)
+        let source = videoTrackScreenObject.copyableImageBuffer(presentationTimeStamp) { frame in
+            CVPixelBufferGetWidth(frame) == CVPixelBufferGetWidth(target)
+                && CVPixelBufferGetHeight(frame) == CVPixelBufferGetHeight(target)
+                && CVPixelBufferGetPixelFormatType(frame) == CVPixelBufferGetPixelFormatType(target)
+        }
+        guard let source else {
+            return false
+        }
+        if pixelTransferSession == nil {
+            var session: VTPixelTransferSession?
+            VTPixelTransferSessionCreate(allocator: kCFAllocatorDefault, pixelTransferSessionOut: &session)
+            pixelTransferSession = session
+        }
+        guard let session = pixelTransferSession.map({ $0 as! VTPixelTransferSession }) else { // swiftlint:disable:this force_cast
+            return false
+        }
+        // Same colour tags on both sides, so the transfer is a plain copy.
+        CVBufferPropagateAttachments(source, target)
+        return VTPixelTransferSessionTransferImage(session, from: source, to: target) == noErr
     }
 
     func setVideoCaptureLatency(_ presentationTimeStamp: CMTime) {
