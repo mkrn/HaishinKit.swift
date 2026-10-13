@@ -694,7 +694,13 @@ public actor RTMPStream {
 
     private func startMixerInputConsumers() {
         let (audioStream, audioContinuation) = AsyncStream.makeStream(of: (AVAudioPCMBuffer, AVAudioTime).self)
-        let (videoStream, videoContinuation) = AsyncStream.makeStream(of: CMSampleBuffer.self)
+        // Raw frames waiting for this actor are capped like the encoder's input queue
+        // (setVideoInputBufferCounts), so a busy actor drops old frames instead of piling them up.
+        let videoInputBufferCounts = outgoing.videoInputBufferCounts
+        let (videoStream, videoContinuation) = AsyncStream.makeStream(
+            of: CMSampleBuffer.self,
+            bufferingPolicy: 0 < videoInputBufferCounts ? .bufferingNewest(videoInputBufferCounts) : .unbounded
+        )
         mixerAudioContinuation = audioContinuation
         mixerVideoContinuation = videoContinuation
         Task {

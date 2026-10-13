@@ -98,8 +98,10 @@ struct DisplayLinkTime {
 final class DisplayLinkChoreographer: NSObject {
     private static let preferredFramesPerSecond = 0
 
+    /// Keeps only the newest tick. A compositor that falls behind skips ticks instead of rendering a
+    /// burst of frames that would pile up in the encoders' and recorder's queues.
     var updateFrames: AsyncStream<DisplayLinkTime> {
-        AsyncStream { continuation in
+        AsyncStream(DisplayLinkTime.self, bufferingPolicy: .bufferingNewest(1)) { continuation in
             self.continutation = continuation
         }
     }

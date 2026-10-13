@@ -21,6 +21,8 @@
 /// ```
 public actor StreamRecorder {
     static let defaultPathExtension = "mp4"
+    /// Video frames allowed to wait for the writer; older ones are dropped.
+    static let videoInputBufferCounts = 8
 
     /// The error domain codes.
     public enum Error: Swift.Error {
@@ -127,7 +129,9 @@ public actor StreamRecorder {
     private var videoPresentationTime: CMTime = .zero
     private var dimensions: CMVideoDimensions = .init(width: 0, height: 0)
     nonisolated(unsafe) private var inputContinuation: AsyncStream<CMSampleBuffer>.Continuation?
+    nonisolated(unsafe) private var videoInputContinuation: AsyncStream<CMSampleBuffer>.Continuation?
     private var inputConsumerTask: Task<Void, Never>?
+    private var videoInputConsumerTask: Task<Void, Never>?
 
     /// Creates a new recorder.
     public init() {
@@ -266,13 +270,29 @@ public actor StreamRecorder {
                 append(sampleBuffer)
             }
         }
+        // Video has its own capped queue: a raw 4K frame is 12.4 MB, and the writer drops frames
+        // anyway when it isn't ready for more. Audio stays unbounded so it never gaps.
+        let (videoStream, videoContinuation) = AsyncStream.makeStream(
+            of: CMSampleBuffer.self,
+            bufferingPolicy: .bufferingNewest(Self.videoInputBufferCounts)
+        )
+        videoInputContinuation = videoContinuation
+        videoInputConsumerTask = Task {
+            for await sampleBuffer in videoStream {
+                append(sampleBuffer)
+            }
+        }
     }
 
     private func stopInputConsumer() {
         inputContinuation?.finish()
         inputContinuation = nil
+        videoInputContinuation?.finish()
+        videoInputContinuation = nil
         inputConsumerTask?.cancel()
         inputConsumerTask = nil
+        videoInputConsumerTask?.cancel()
+        videoInputConsumerTask = nil
     }
 
     private func append(_ sampleBuffer: CMSampleBuffer) {
@@ -373,7 +393,7 @@ public actor StreamRecorder {
 extension StreamRecorder: StreamOutput {
     // MARK: HKStreamOutput
     nonisolated public func stream(_ stream: some StreamConvertible, didOutput video: CMSampleBuffer) {
-        inputContinuation?.yield(video)
+        videoInputContinuation?.yield(video)
     }
 
     nonisolated public func stream(_ stream: some StreamConvertible, didOutput audio: AVAudioBuffer, when: AVAudioTime) {
@@ -387,7 +407,7 @@ extension StreamRecorder: StreamOutput {
 extension StreamRecorder: MediaMixerOutput {
     // MARK: MediaMixerOutput
     nonisolated public func mixer(_ mixer: MediaMixer, didOutput sampleBuffer: CMSampleBuffer) {
-        inputContinuation?.yield(sampleBuffer)
+        videoInputContinuation?.yield(sampleBuffer)
     }
 
     nonisolated public func mixer(_ mixer: MediaMixer, didOutput buffer: AVAudioPCMBuffer, when: AVAudioTime) {
